@@ -1,0 +1,14 @@
+hi-score = -1
+for all words in dictionary do:
+  if current word cannot be formed out of letters on rack (and one letter on board), then
+    skip it
+  for all stored places on board to attach a word do:
+    if current word won't fit (touches/overlaps other words on board), then
+      skip this place on board
+    calculate score
+    if current score > hi-score then
+      hi-score is set to current score
+      hi-word is set to current word
+      hi-loc is set to current place on board
+finally, use hi-word/hi-loc for computer's turn
+note: if hi-score = -1 (after all that), then no play is possible
