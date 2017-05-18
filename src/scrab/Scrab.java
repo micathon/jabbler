@@ -1,5 +1,8 @@
 package scrab;
-import dict.*;
+
+import iconst.IConst;
+import board.Board;
+import player.Player;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -7,7 +10,22 @@ import java.io.InputStreamReader;
 
 public class Scrab implements IConst {
 
-	public static void main(String[] args) 
+	private String[] args;
+	
+	public Scrab(String[] args) {
+		this.args = args;
+	}
+	
+	public void runScrab() {
+		try {
+			scrabMain(args);
+		}
+		catch (IOException exc) {
+			//
+		}
+	}
+	
+	private void scrabMain(String[] args)
 		throws IOException
 	{
 		BufferedReader br = new BufferedReader(new
@@ -64,14 +82,17 @@ class CmdProc implements IConst {
 		String cmdarg;
 		boolean rtnval = true;
 		
-		ch = getCmdChar(cmdbuf);
+		cmdarg = getCmdChArg(cmdbuf);
+		ch = cmdarg.charAt(0);
+		if (cmdarg.length() > 1) {
+			cmdbuf = cmdarg;
+		}
 		cmdarg = getCmdArg(cmdbuf);
 		switch (ch) {
 		case BADCMDCH:
 			break;
 		case 'r':
 			restartGame(cmdarg);
-			isNewGame = true;
 			break;
 		case 'z':
 			setGameFlags(cmdarg, isNewGame);
@@ -88,6 +109,9 @@ class CmdProc implements IConst {
 		case 'u':
 			toggleSwapMode();
 			break;
+		case 'v':
+			togglePipeMode();
+			break;
 		case 'i':
 			upArrow();
 			break;
@@ -99,6 +123,12 @@ class CmdProc implements IConst {
 			break;
 		case 'k':
 			rightArrow();
+			break;
+		case 'I':
+			goToRow(cmdarg);
+			break;
+		case 'J':
+			goToCol(cmdarg);
 			break;
 		case 'x':
 			boardRackClick(cmdarg);
@@ -169,10 +199,11 @@ class CmdProc implements IConst {
 		System.out.println("s - show board");
 		System.out.println("t - toggle rack mode");
 		System.out.println("u - toggle swap mode");
-		System.out.println("i - up arrow");
-		System.out.println("m - down arrow");
-		System.out.println("j - left arrow");
-		System.out.println("k - right arrow");
+		System.out.println("v - toggle pipe mode");
+		System.out.println("i0 - up arrow/go to row");
+		System.out.println("m0 - down arrow/go to row");
+		System.out.println("j0 - left arrow/go to column");
+		System.out.println("k0 - right arrow/go to column");
 		System.out.println("x - click on rack/board");
 		System.out.println("n - next player");
 		System.out.println("p - pass/scrabble");
@@ -204,35 +235,44 @@ class CmdProc implements IConst {
 		System.out.println("wr cat    : shuffle rack: starts with \"cat\"");
 		System.out.println("wr rob.n  : shuffle rack: starts with \"robin\" (blank = i)");
 		System.out.println("wr mo se  : shuffle rack: starts with \"mouse\" (blank = u)");
+		System.out.println("v         : turn off for cleaner board display");
 	}
 	
-	public char getCmdChar(String cmdbuf) {
+	public String getCmdChArg(String cmdbuf) {
 		// return first char. of command line on success
 		// special cases : return value
+		//   i0          : I 0
+		//   k9          : J 9
 		//   wr myword   : W
 		//   wr          : W
 		//   help        : h
 		int n;
-		char ch;
+		char ch = cmdbuf.charAt(0);
+		String buf = cmdbuf.substring(1);
 		
 		if (cmdbuf.length() == 1) {
-			return cmdbuf.charAt(0);
+			return "" + ch;
+		}
+		if (cmdbuf.startsWith("i") || cmdbuf.startsWith("m")) {
+			return "I " + buf;
+		}
+		if (cmdbuf.startsWith("j") || cmdbuf.startsWith("k")) {
+			return "J " + buf;
 		}
 		if (cmdbuf.startsWith("wr")) {
 			if (cmdbuf.length() > 2 && cmdbuf.charAt(2) != ' ') {
-				return BADCMDCH; 
+				return "" + BADCMDCH; 
 			}
-			return 'W';
+			return "W";
 		}
 		if (cmdbuf.equals("help")) {
-			return 'h';
+			return "h";
 		}
 		n = cmdbuf.indexOf(' ');
 		if (n < 0 || n > 1) {
-			return BADCMDCH;
+			return "" + BADCMDCH;
 		}
-		ch = cmdbuf.charAt(0);
-		return ch;
+		return "" + ch;
 	}
 	
 	public String getCmdArg(String cmdbuf) {
@@ -302,9 +342,7 @@ class CmdProc implements IConst {
 			if (inbuf.length() == 0) {
 				continue;
 			}
-			if (inbuf.length() > 1) {
-				//
-			}
+			if (inbuf.length() > 1) { }
 			else if (inbuf.equals("Y")) {
 				flag = true;
 				break;
@@ -375,9 +413,23 @@ class CmdProc implements IConst {
 		return inbuf;
 	}
 		
+	public void putOkCmdString(String msg) {
+		System.out.println(msg);
+		System.out.print("OK");
+		System.out.print(DEFPROMPT);
+		getReadLine();
+	}
+		
 	private void restartGame(String cmdarg) {
 		bo.restartGame(cmdarg);
-		bo.showBoard();
+		player = bo.getCurrPlayer();
+		if (player.isRobot()) {
+			nextPlayer(true);
+		}
+		else {
+			bo.showBoard();
+		}
+		isNewGame = true;
 	}
 	
 	private void setGameFlags(String cmdarg, boolean isNewGame) {
@@ -421,6 +473,39 @@ class CmdProc implements IConst {
 	
 	private void toggleSwapMode() {
 		bo.toggleSwapMode();
+		bo.showBoard();
+	}
+	
+	private void togglePipeMode() {
+		bo.togglePipeMode();
+		bo.showBoard();
+	}
+	
+	private void goToRow(String buf) {
+		int col = bo.getBrdCol();
+		int destRow = bo.hexDigToInt(buf);
+
+		if (bo.isWordOnBoard()) {
+			return;
+		}
+		if (destRow < 0) {
+			return;
+		}
+		bo.setBrdPos(destRow, col);
+		bo.showBoard();
+	}
+	
+	private void goToCol(String buf) {
+		int row = bo.getBrdRow();
+		int destCol = bo.hexDigToInt(buf);
+
+		if (bo.isWordOnBoard()) {
+			return;
+		}
+		if (destCol < 0) {
+			return;
+		}
+		bo.setBrdPos(row, destCol);
 		bo.showBoard();
 	}
 	
@@ -677,8 +762,7 @@ class CmdProc implements IConst {
 		// player indicated: go to next player
 		char ch;
 		int row, col;
-		int loc;
-		int score, turnScore;
+		int turnScore;
 		StringBuilder badWrdLst = new StringBuilder("");
 		boolean isUseDict = bo.getUseDict();
 		int playerNo;
@@ -765,8 +849,22 @@ class CmdProc implements IConst {
 			bo.showBoard();
 			return;
 		}
-		score = player.getScore() + turnScore;
-		player.setScore(score);
+		setScoreWoNext(turnScore);
+		nextPlayer(true);
+	}
+
+	private void setScoreWoNext(int turnScore) {
+		int score;
+		char ch;
+		int row, col;
+		int loc;
+		boolean forceBlanks = false;  // just for debug!
+
+		if (turnScore > NEGSCORE) {
+			player.setTurnScore(turnScore);
+			score = player.getScore() + turnScore;
+			player.setScore(score);
+		}
 		// make all temp. letter permanent
 		for (int i=0; i < BOARDHEIGHT; i++) {
 			for (int j=0; j < BOARDWIDTH; j++) {
@@ -777,19 +875,25 @@ class CmdProc implements IConst {
 				}
 			}
 		}
+		bo.out("setSWN: top while");
 		while (bo.turnBlocs.getBlocCount() > 0) {
 			// for each blank in turn, pop/add to permanent blank list
 			loc = bo.turnBlocs.topBlankLoc();
 			row = bo.turnBlocs.getBlankRow(loc);
 			col = bo.turnBlocs.getBlankCol(loc);
 			ch = bo.turnBlocs.topBlankVal();
+			bo.out("setSWN: while, ch = ["+ch+"]");
 			bo.turnBlocs.popBlank();
 			bo.boardBlocs.pushBlank(row, col, ch);
 		}
+		bo.out("setSWN: btm while");
 		bo.isFirstMove = false;
 		bo.zeroPassCount();
 		player.rack.fillRack();
-		nextPlayer(true);
+		if (!player.isRobot() || !forceBlanks) {
+			return;
+		}  // debug only:
+		player.rack.setBlanks(turnScore % 3);
 	}
 	
 	private void passOrMulti() {
@@ -871,40 +975,55 @@ class CmdProc implements IConst {
 	
 	private void nextPlayer(boolean isWordMade) {
 		int playerNo;
+		int score;
 		
-		playerNo = bo.getCurrPlayerNo();
-		if (!isWordMade) {
-			player.setTurnScore(0);
-		}
-		// clear 2 lists of blanks: interchanged and placed on board
-		bo.turnBlocs.clrStk();
-		bo.xBlocs.clrStk();
-		if (bo.getBagSize() > 0) {}
-		else if (player.rack.getRackLen() == 0) {
-			// player has gone out
-			bo.setOutPlayerNo(playerNo);
-			gameOver();
-			return;
-		}
-		else if (bo.getPassCount() >= bo.getPlayerCount()) {
-			// bag empty, all players have passed
-			gameOver();
-			return;
-		}
-		for (;;) {
-			playerNo = (playerNo + 1) % bo.getPlayerCount();
-			bo.setCurrPlayerNo(playerNo);
-			player = bo.getCurrPlayer();
-			// skip inactive players
-			if (!player.isActive()) {
-				continue;
+		do {
+			playerNo = bo.getCurrPlayerNo();
+			if (player.isRobot()) {
+				bo.showBoard();
+				if (!getYNflag("Robot's turn: Keep playing? ")) {
+					if (getYNflag("Quit game: Are you sure? ")) {
+						gameOver();
+						return;
+					}
+				}
+				score = bo.rp.doRobotsTurn(playerNo);
+				setScoreWoNext(score);
+				isWordMade = true;
 			}
-			// skip players who unsuccessfully challenged
-			if (!player.isSkip()) {
-				break;
+			if (!isWordMade) {
+				player.setTurnScore(0);
 			}
-			player.setSkip(false);
-		}
+			// clear 2 lists of blanks: interchanged and placed on board
+			bo.turnBlocs.clrStk();
+			bo.xBlocs.clrStk();
+			if (bo.getBagSize() > 0) {}
+			else if (player.rack.getRackLen() == 0) {
+				// player has gone out
+				bo.setOutPlayerNo(playerNo);
+				gameOver();
+				return;
+			}
+			else if (bo.getPassCount() >= bo.getPlayerCount()) {
+				// bag empty, all players have passed
+				gameOver();
+				return;
+			}
+			for (;;) {
+				playerNo = (playerNo + 1) % bo.getPlayerCount();
+				bo.setCurrPlayerNo(playerNo);
+				player = bo.getCurrPlayer();
+				// skip inactive players
+				if (!player.isActive()) {
+					continue;
+				}
+				// skip players who unsuccessfully challenged
+				if (!player.isSkip()) {
+					break;
+				}
+				player.setSkip(false);
+			}
+		} while (player.isRobot());
 		bo.showBoard();
 	}
 	
@@ -991,20 +1110,8 @@ class CmdProc implements IConst {
 	
 	private void backSpace() {
 		// move letter most recently placed on board to rack
-		char ch;
-		player = bo.getCurrPlayer();
-		for (int i = BOARDHEIGHT - 1; i >= 0; i--) {
-			for (int j = BOARDWIDTH - 1; j >= 0; j--) {
-				if (bo.isTempLtr(i, j)) {
-					ch = bo.getBoard(i, j);
-					ch = bo.convertBoardToRack(ch);
-					player.rack.appendRackChar(ch);
-					bo.setBoard(EMPTYCH, i, j);
-					bo.setBrdPos(i, j);
-					bo.showBoard();
-					return;
-				}
-			}
+		if (bo.isWordOnBoard()) {
+			boardClick();
 		}
 	}
 	
@@ -1018,6 +1125,8 @@ class CmdProc implements IConst {
 		String name;
 		
 		bo.setGameOver(true);
+		bo.showBoard();
+		putOkCmdString("Game Over");
 		for (int i=0; i < bo.getPlayerCount(); i++) {
 			// for all players who didn't go out:
 			if (i == outPlayerNo) {
@@ -1260,1571 +1369,6 @@ class CmdProc implements IConst {
 		}
 		player.rack.shuffleRack(buf);
 		bo.showBoard();
-	}
-	
-}
-
-interface IConst {
-	int BOARDWIDTH = 15;
-	int BOARDHEIGHT = 15;
-	int RACKSIZ = 7;
-	int BONUS7LTRWRD = 50;
-	char EMPTYCH = ' ';
-	char BRDSPCH = '.';
-	char BRDBLCH = '*';
-	char BRDTMPCH = '$';
-	char BRD2LCH = '2';
-	char BRD3LCH = '3';
-	char BRD2WCH = '4';
-	char BRD3WCH = '9';
-	//int TMPBAGSIZ = 29;
-	int TMPBAGSIZ = 40;
-	int BAGSIZ = 100;
-	//int BAGSIZ = TMPBAGSIZ;
-	int ALPHASIZ = 26;
-	int BLSTKSIZ = 2;
-	int DEFPLAYTABSIZ = 2;
-	int MAXPLAYTABSIZ = 4;  // max. no. of players
-	char DITTOCH = '.';
-	char USEIDXCH = '-';
-	char ROBOTCH = '^';
-	char PTRCH = '^';
-	int BRDACROSS = 0;
-	int BRDDOWN = 1;
-	//int BRDNULL = 2;
-	//int BRDXMODE = 3;
-	int MODECOUNT = 2;  // used to be 4
-	char ACROSSCH = '>';
-	char DOWNCH = '^';
-	char XMODECH = 'X';
-	String DEFPROMPT = "> ";
-}
-
-class Board implements IConst {
-		
-	private char[][] board = new char[BOARDHEIGHT][BOARDWIDTH];
-	private int[][] brdfacltr = {
-		{1,1,1,2,1,1,1,1,1,1,1,2,1,1,1},
-		{1,1,1,1,1,3,1,1,1,3,1,1,1,1,1},
-		{1,1,1,1,1,1,2,1,2,1,1,1,1,1,1},
-		{2,1,1,1,1,1,1,2,1,1,1,1,1,1,2},
-		{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-		{1,3,1,1,1,3,1,1,1,3,1,1,1,3,1},
-		{1,1,2,1,1,1,2,1,2,1,1,1,2,1,1},
-		{1,1,1,2,1,1,1,1,1,1,1,2,1,1,1},
-		{1,1,2,1,1,1,2,1,2,1,1,1,2,1,1},
-		{1,3,1,1,1,3,1,1,1,3,1,1,1,3,1},
-		{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-		{2,1,1,1,1,1,1,2,1,1,1,1,1,1,2},
-		{1,1,1,1,1,1,2,1,2,1,1,1,1,1,1},
-		{1,1,1,1,1,3,1,1,1,3,1,1,1,1,1},
-		{1,1,1,2,1,1,1,1,1,1,1,2,1,1,1}
-	};
-	private int[][] brdfacwrd = {
-		{3,1,1,1,1,1,1,3,1,1,1,1,1,1,3},
-		{1,2,1,1,1,1,1,1,1,1,1,1,1,2,1},
-		{1,1,2,1,1,1,1,1,1,1,1,1,2,1,1},
-		{1,1,1,2,1,1,1,1,1,1,1,2,1,1,1},
-		{1,1,1,1,2,1,1,1,1,1,2,1,1,1,1},
-		{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-		{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-		{3,1,1,1,1,1,1,2,1,1,1,1,1,1,3},
-		{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-		{1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-		{1,1,1,1,2,1,1,1,1,1,2,1,1,1,1},
-		{1,1,1,2,1,1,1,1,1,1,1,2,1,1,1},
-		{1,1,2,1,1,1,1,1,1,1,1,1,2,1,1},
-		{1,2,1,1,1,1,1,1,1,1,1,1,1,2,1},
-		{3,1,1,1,1,1,1,3,1,1,1,1,1,1,3}
-	};
-	private char[] bag = new char[BAGSIZ];
-	private int[] bagltrcount = {
-	//  A,B,C,D,E, F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z
-		9,2,2,4,12,2,3,2,9,1,1,4,2,6,8,2,1,6,4,6,4,2,2,1,2,1
-	};
-	private int[] bagltrval = {
-	//  A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q, R,S,T,U,V,W,X,Y,Z
-		1,3,3,2,1,4,2,4,1,8,5,1,3,1,1,3,10,1,1,1,1,4,4,8,4,10
-	};
-	private int bagSize = BAGSIZ;
-	public String errmsg;
-	public BlankLocs boardBlocs, turnBlocs, xBlocs;
-	private Dict dict;
-	private boolean isUseDict = false;
-	public boolean isFirstMove;
-	private int playerCount;
-	private Player[] playerTab = new Player[MAXPLAYTABSIZ];
-	private boolean rackMode;
-	private boolean swapMode;
-	public boolean isXblanks = false;
-	public boolean is3kind = false;
-	public boolean is4kind = false;
-	private int currPlayerNo;
-	private int currBrdRow;
-	private int currBrdCol;
-	private int currBrdMode;
-	private int passCount;
-	private int outPlayerNo;
-	private boolean isGameOver;
-	
-	Board(String[] args) {
-		boolean isBagOk;
-		int weeBagSiz = TMPBAGSIZ; 
-		
-		errmsg = "";
-		initBoard();
-		isBagOk = initBag();
-		if (BAGSIZ == weeBagSiz) {}
-		else if (!isBagOk) {
-			errmsg = "Bad arr inz: bagltrcount";
-		}
-		else if (!testBagOps(7)) {
-			errmsg = "Fail: testBagOps";
-		}
-		playerCount = getNewPlayerCount(true, args);
-		initPlayerNo();
-		dict = new Dict();
-	}
-
-	private void initBoard() {
-		for (int i=0; i < BOARDHEIGHT; i++) {
-			for (int j=0; j < BOARDWIDTH; j++) {
-				board[i][j] = EMPTYCH;
-			}
-		}
-		currBrdRow = BOARDHEIGHT / 2;
-		currBrdCol = BOARDWIDTH / 2;
-		currBrdMode = BRDACROSS;
-		initMisc();
-	}
-	
-	public void initMisc() {
-		rackMode = true;
-		swapMode = false;
-		isFirstMove = true;
-		isGameOver = false;
-		boardBlocs = new BlankLocs();  // blank loc(s) on board
-		turnBlocs = new BlankLocs();   // blank loc(s) in curr. turn
-		xBlocs = new BlankLocs();      // blank loc(s) being interchanged
-		bagSize = BAGSIZ;
-		outPlayerNo = -1;
-		passCount = 0;
-	}
-	
-	public void restartGame(String newNames) {
-		String[] args = {""}; 
-		int count;
-		Player player;
-
-		args[0] = newNames;
-		initBoard();
-		initBag();
-		count = getNewPlayerCount(false, args);
-		if (count >= 0) {
-			playerCount = count;
-		}
-		else {
-			for (int i=0; i < playerCount; i++) {
-				player = playerTab[i];
-				player.restartPlayer();
-				player.rack.clearRack();
-				player.rack.fillRack();
-			}
-		}
-		initPlayerNo();
-	}
-	
-	public void setGameFlags(String cmdarg) {
-		// user is setting up to 3 flags
-		cmdarg = cmdarg.toUpperCase();
-		// 3kind/4kind mutually exclusive
-		is3kind = false;    // 3
-		is4kind = false;    // 4
-		isXblanks = false;  // I
-		isUseDict = false;  // D
-		// flags are ordered: if all 3 flags are true, then
-		// cmdarg = 3ID or 4ID
-		if (cmdarg.equals("")) {
-			return;
-		}
-		else if (cmdarg.length() > 3) {
-			return;
-		}
-		else if (cmdarg.equals("I")) {
-			isXblanks = true;
-		}
-		else if (cmdarg.equals("3")) {
-			is3kind = true;
-		}
-		else if (cmdarg.equals("4")) {
-			is4kind = true;
-		}
-		else if (cmdarg.equals("D")) {
-			isUseDict = true;
-		}
-		else if (cmdarg.length() < 2) {
-			return;
-		}
-		else if (cmdarg.equals("3I")) {
-			is3kind = true;
-			isXblanks = true;
-		}
-		else if (cmdarg.equals("4I")) {
-			is4kind = true;
-			isXblanks = true;
-		}
-		else if (cmdarg.equals("3D")) {
-			is3kind = true;
-			isUseDict = true;
-		}
-		else if (cmdarg.equals("4D")) {
-			is4kind = true;
-			isUseDict = true;
-		}
-		else if (cmdarg.equals("ID")) {
-			isXblanks = true;
-			isUseDict = true;
-		}
-		else if (cmdarg.length() < 3) {
-			return;
-		}
-		else if (cmdarg.equals("3ID")) {
-			is3kind = true;
-			isXblanks = true;
-			isUseDict = true;
-		}
-		else if (cmdarg.equals("4ID")) {
-			is4kind = true;
-			isXblanks = true;
-			isUseDict = true;
-		}
-	}
-	
-	private boolean initBag() {
-		int k = 0;
-		int blankCount = 0;
-		
-		for (int i=0; i < bagltrcount.length; i++) {
-			for (int j=0; j < bagltrcount[i]; j++, k++) {
-				if (k < BAGSIZ) {
-					bag[k] = (char)('A' + i);
-				}
-			}
-		}
-		for (int i=k; i < BAGSIZ; i++) {
-			bag[k] = EMPTYCH;
-			blankCount++;
-		}
-		// return false on error
-		return (blankCount == BLSTKSIZ);
-	}
-	
-	public boolean isBlankBagLtr(char ch) {
-		return ch == EMPTYCH;
-	}
-	
-	public char getBoard(int i, int j) {
-		return board[i][j];
-	}
-	
-	public void setBoard(char ch, int i, int j) {
-		board[i][j] = ch;
-	}
-	
-	public int getFacLtr(int i, int j) {
-		// 1 = normal
-		// 2 = double letter score
-		// 3 = triple letter score
-		return brdfacltr[i][j];
-	}
-	
-	public int getFacWrd(int i, int j) {
-		// 1 = normal
-		// 2 = double word score
-		// 3 = triple word score
-		return brdfacwrd[i][j];
-	}
-	
-	public int getBrdHeight() {
-		return BOARDHEIGHT;
-	}
-	
-	public int getBrdWidth() {
-		return BOARDWIDTH;
-	}
-	
-	public char getBrdCellCh(int i, int j) {
-		// display char. of cell on board
-		if (isBrdBlank(i, j)) {
-			return BRDBLCH;
-		}
-		if (board[i][j] != EMPTYCH) {
-			return board[i][j];
-		}
-		if (brdfacltr[i][j] == 2) {
-			return BRD2LCH;
-		}
-		if (brdfacltr[i][j] == 3) {
-			return BRD3LCH;
-		}
-		if (brdfacwrd[i][j] == 2) {
-			return BRD2WCH;
-		}
-		if (brdfacwrd[i][j] == 3) {
-			return BRD3WCH;
-		}
-		return BRDSPCH;
-	}
-	
-	public boolean isBrdBlank(int i, int j) {
-		int k = boardBlocs.getBlocIdx(i, j);
-		return k >= 0;
-	}
-	
-	public boolean isValidBoardCell(int i, int j) {
-		return (i >= 0) && (i < BOARDHEIGHT) &&
-			(j >= 0) && (j < BOARDWIDTH);
-	}
-	
-	public char getBrdLtrCh(int i, int j) {
-		// display letter (upper case) of cell on board
-		// if blank then return value of blank
-		char ch;
-		String s;
-		
-		if (!isValidBoardCell(i, j)) {
-			return EMPTYCH;
-		}
-		ch = getBoard(i, j);
-		if (ch == EMPTYCH) {
-			return ch;
-		}
-		if (ch == BRDBLCH) {
-			ch = boardBlocs.getBlankVal(i, j);
-		}
-		else if (ch == BRDTMPCH) {
-			ch = turnBlocs.getBlankVal(i, j);
-		}
-		else if (Character.isLowerCase(ch)) {
-			s = "" + ch;
-			s = s.toUpperCase();
-			ch = s.charAt(0);
-		}
-		return ch;
-	}
-	
-	public boolean getUseDict() {
-		return isUseDict;
-	}
-	
-	public void setUseDict(boolean flag) {
-		isUseDict = flag;
-	}
-	
-	public void showBoard() {
-		// display board
-		// to right of board, display:
-		//   racks, player names
-		//   caret points to curr. tile of curr. rack
-		//   turn scores, total scores, player names
-		String boardCell;
-		char ch;
-		int n;
-		Player player = null;
-		boolean isShortCell = false;
-		String sepBoardRack = " |";
-		String sepRackNames = sepBoardRack;
-		char rackModeCh = getModeChar(rackMode);
-		char swapModeCh = getModeChar(swapMode);
-		int playerNo = 0;
-		boolean showRackPos = false;
-		int turnScore, totScore;
-		String turnScoreBuf, totScoreBuf;
-		
-		System.out.print(" ");
-		for (int j=0; j < BOARDWIDTH; j++) {
-			boardCell = " " + getBrdHexCh(j);
-			System.out.print(boardCell);
-		}
-		System.out.print(" " + sepBoardRack + "Rack: [" + rackModeCh + ']');
-		System.out.print(" Swap: [" + swapModeCh + ']');
-		System.out.println(" Bag: " + bagSize);
-		for (int i=0; i < BOARDHEIGHT; i++) {
-			ch = getBrdHexCh(i);
-			System.out.print(ch);
-			isShortCell = false;
-			for (int j=0; j < BOARDWIDTH; j++) {
-				ch = getBrdCellCh(i, j);
-				boardCell = "" + ch;
-				if (i == currBrdRow && j == currBrdCol) {
-					if (isBrdEmpty(i, j)) {
-						switch (currBrdMode) {
-						case BRDACROSS:
-							boardCell = "" + ACROSSCH;
-							break;
-						case BRDDOWN:
-							boardCell = "" + DOWNCH;
-							break;
-						}
-					}
-					else if (ch == BRDBLCH) {
-						ch = boardBlocs.getBlankVal(i, j);
-						boardCell = "" + ch;
-						boardCell = boardCell.toLowerCase();
-					}
-					boardCell = "[" + boardCell + ']';
-					isShortCell = true;  // next cell not preceded by blank
-				}
-				else if (!isShortCell) {
-					// previous cell not succeeded by ']'
-					boardCell = " " + boardCell;
-				}
-				else if (j <= BOARDWIDTH - 1) {
-					isShortCell = false;
-				}
-				System.out.print(boardCell);
-			}
-			if (!isShortCell) {
-				sepBoardRack = " " + sepBoardRack;
-			}
-			if (showRackPos) {
-				System.out.print(sepBoardRack);
-				n = RACKSIZ;
-				for (int j=0; j < n; j++) {
-					if (j == player.rack.getRackPos()) {
-						// indicator char. at curr. tile position
-						System.out.print(PTRCH);
-					}
-					else {
-						System.out.print(' ');
-					}
-				}
-				System.out.print(sepRackNames);
-				showRackPos = false;
-			}
-			else if (playerNo < playerCount) {
-				player = playerTab[playerNo++];
-				System.out.print(sepBoardRack + player.rack.getRackStr());
-				System.out.print(sepRackNames + player.getName());
-				if (playerNo == (currPlayerNo + 1)) {
-					showRackPos = true;
-				}
-			}
-			if (i == (playerCount + 1)) {
-				System.out.print(sepBoardRack + "________|");
-			}
-			if (i == (playerCount + 2)) {
-				System.out.print(sepBoardRack + "Wrd Tot" + sepRackNames);
-				playerNo = playerCount;
-			}
-			if ((i > (playerCount + 2)) && (playerNo < (2 * playerCount))) {
-				player = playerTab[playerNo++ - playerCount];
-				turnScore = player.getTurnScore();
-				totScore = player.getScore();
-				turnScoreBuf = "" + turnScore;
-				totScoreBuf = "" + totScore;
-				turnScoreBuf = padLeft(turnScoreBuf, 3);
-				totScoreBuf = padLeft(totScoreBuf, 3);
-				System.out.print(sepBoardRack + turnScoreBuf + ' ' + totScoreBuf);
-				System.out.print(sepRackNames + player.getName());
-			}
-			sepBoardRack = sepRackNames;
-			System.out.println("");
-		}
-		System.out.println("");
-	}
-	
-	public char getBrdHexCh(int i) {
-		if (i < 0 || i > 16) {
-			return EMPTYCH;
-		}
-		if (i < 10) {
-			return (char)('0' + i);
-		}
-		return (char)('A' + i - 10);
-	}
-	
-	public int getBagSize() {
-		return bagSize;
-	}
-	
-	public boolean pushBag(char ltr) {
-		if (bagSize >= BAGSIZ) {
-			return false;
-		}
-		bag[bagSize++] = ltr;
-		return true;
-	}
-	
-	public char popBag() {
-		int bagIdx;
-		char rtnval;
-		
-		if (bagSize <= 0) {
-			return (char) 0;
-		}
-		// pick random tile char. from bag
-		bagIdx = rollDice(bagSize);
-		rtnval = bag[bagIdx];
-		bag[bagIdx] = bag[bagSize - 1];
-		bagSize--;
-		return rtnval;
-	}
-	
-	public int rollDice(int faceCount) {
-		// random no. between 0 and faceCount - 1
-		int rtnval;
-		rtnval = (int) Math.floor(Math.random() * faceCount);
-		return rtnval;
-	}
-	
-	public boolean testBagOps(int count) {
-		// test pop/push bag opers.
-		// count between 1 and 99
-		// return false on error
-		char[] word = new char[count];
-		char ch;
-		String wordstr = "";
-		
-		for (int i=0; i < count; i++) {
-			ch = popBag();
-			word[i] = ch;
-			wordstr += ch;
-		}
-		for (int i=0; i < count; i++) {
-			ch = word[i];
-			if (!pushBag(ch)) {
-				return false;
-			}
-		}
-		if (bagSize != BAGSIZ) {
-			return false;
-		}
-		System.out.println("Bag word = [" + wordstr + ']');
-		return true;
-	}
-	
-	public int getPlayerCount() {
-		return playerCount;
-	}
-	
-	public int getActiveCount() {
-		Player player;
-		int count = 0;
-
-		for (int i=0; i < playerCount; i++) {
-			player = playerTab[i];
-			if (player.isActive()) {
-				count++;
-			}
-		}
-		return count;
-	}
-	
-	private int getNewPlayerCount(boolean firstTime, String[] args) {
-		// user is setting between 1 and 4 player names
-		// return no. of players
-		Player player;
-		String name;
-		String oldName;
-		String[] newArgs;
-		int argCount;
-		boolean handled;
-		int playerCount = 0;
-		
-		if (firstTime) {
-			for (int i=0; i < MAXPLAYTABSIZ; i++) {
-				playerTab[i] = new Player(this);
-			}
-			if (args.length == 0) {
-				return getDefPlayerCount();
-			}
-			newArgs = args;
-			argCount = args.length;
-		}
-		else {
-			newArgs = expandArgs(args[0]);
-			if (newArgs[0].equals("")) {
-				return -1;  // don't change player names
-			}
-			argCount = newArgs.length;
-			for (int i=0; i < argCount; i++) {
-				player = playerTab[i];
-				player.restartPlayer();
-				player.rack.clearRack();
-				player.rack.fillRack();
-			}
-		}
-		for (int i=0; i < argCount; i++) {
-			if (i >= MAXPLAYTABSIZ) {
-				break;
-			}
-			playerCount++;
-			player = playerTab[i];
-			if (firstTime) {
-				name = args[i];
-			}
-			else {
-				name = newArgs[i];
-			}
-			if (name.equals("")) {
-				playerCount--;
-				break;
-			}
-			handled = false;
-			if (name.length() == 1) {
-				// handle special chars.: dot, hyphen, caret
-				handled = true;
-				oldName = player.getName();
-				switch (name.charAt(0)) {
-				case DITTOCH:
-					if (oldName.equals("")) {
-						player.setPlayer("", i + 1, false);
-					}
-					break;
-				case USEIDXCH:
-					player.setPlayer("", i + 1, false);
-					break;
-				case ROBOTCH:
-					player.setPlayer("", i + 1, true);
-					break;
-				default:
-					handled = false;
-				}
-			}
-			if (!handled) {
-				// player name is non-special char.
-				player.setPlayer(name, 0, false);
-			}
-		}
-		return playerCount;
-	}
-	
-	public String[] expandArgs(String argstr) {
-		// argstr = list of up to 4 words
-		// words separated by spaces
-		// put each word in an array of strings
-		String[] strTab = new String[MAXPLAYTABSIZ];
-		String arg;
-		int j = 0;
-		int k = -1;
-		int n;
-		
-		argstr = argstr.trim();
-		for (int i=0; i < strTab.length; i++) {
-			n = argstr.indexOf(' ');
-			if (n < 0) {
-				arg = argstr;
-			}
-			else {
-				arg = argstr.substring(0, n);
-			}
-			if (arg.equals("")) {
-				k = i;
-				break;
-			}
-			strTab[j++] = arg;
-			argstr = argstr.substring(arg.length());
-			argstr = argstr.trim();
-		}
-		if (k >= 0) {
-			for (int i = k; i < strTab.length; i++) {
-				strTab[i] = "";
-			}
-		}
-		return strTab;
-	}
-	
-	private int getDefPlayerCount() {
-		// set player names to defaults for first 2 players
-		// clear playerTab elements for subsequent 2 players
-		Player player;
-
-		for (int i=0; i < DEFPLAYTABSIZ; i++) {
-			player = playerTab[i];
-			player.setPlayer("", i + 1, false);
-		}
-		for (int i = DEFPLAYTABSIZ; i < MAXPLAYTABSIZ; i++) {
-			player = playerTab[i];
-			player.clearPlayer();
-		}
-		return DEFPLAYTABSIZ;
-	}
-	
-	public char getModeChar(boolean flag) {
-		return (flag) ? 'X' : '.';
-	}
-	
-	public boolean isRackMode() {
-		return rackMode;
-	}
-	
-	public void toggleRackMode() {
-		rackMode = !rackMode;
-	}
-	
-	public boolean isSwapMode() {
-		return swapMode;
-	}
-	
-	public void toggleSwapMode() {
-		swapMode = !swapMode;
-	}
-	
-	public int getCurrPlayerNo() {
-		return currPlayerNo;
-	}
-	
-	public void setCurrPlayerNo(int playerNo) {
-		currPlayerNo = playerNo;
-	}
-
-	public void initPlayerNo() {
-		currPlayerNo = rollDice(playerCount);
-	}
-	
-	public Player getCurrPlayer() {
-		return playerTab[currPlayerNo];
-	}
-	
-	public Player getPlayer(int playerNo) {
-		return playerTab[playerNo];
-	}
-	
-	public int getOutPlayerNo() {
-		return outPlayerNo;
-	}
-	
-	public void setOutPlayerNo(int playerNo) {
-		outPlayerNo = playerNo;
-	}
-
-	public boolean getGameOver() {
-		return isGameOver;
-	}
-	
-	public void setGameOver(boolean flag) {
-		isGameOver = flag;
-	}
-
-	public int getBrdRow() {
-		return currBrdRow;
-	}
-	
-	public int getBrdCol() {
-		return currBrdCol;
-	}
-	
-	public void setBrdPos(int row, int col) {
-		currBrdRow = row;
-		currBrdCol = col;
-	}
-	
-	public int getBrdMode() {
-		return currBrdMode;
-	}
-	
-	public void cycleBrdMode() {
-		currBrdMode++;
-		currBrdMode %= MODECOUNT;
-	}
-	
-	public boolean isBrdEmpty(int row, int col) {
-		return (board[row][col] == EMPTYCH);
-	}
-	
-	public boolean isWordOnBoard() {
-		// true if any temp. tiles on board
-		for (int i=0; i < BOARDHEIGHT; i++) {
-			for (int j=0; j < BOARDWIDTH; j++) {
-				if (isTempLtr(i, j)) {
-					return true;
-				}
-			}
-		}
-		return false;
-	}
-	
-	public boolean isWordAcross() {
-		return currBrdMode == BRDACROSS;
-	}
-	
-	public char convertRackToBoard(char ch) {
-		// temp. letters on board are lower case
-		// temp. blank on board differs from perm. blank
-		String s = "" + ch;
-		if (ch == EMPTYCH) {
-			return BRDTMPCH;
-		}
-		s = s.toLowerCase();
-		return s.charAt(0);
-	}
-	
-	public char convertBoardToRack(char ch) {
-		// letters on rack are upper case
-		String s = "" + ch;
-		if (ch == BRDTMPCH) {
-			return EMPTYCH;
-		}
-		s = s.toUpperCase();
-		return s.charAt(0);
-	}
-	
-	public boolean isTempLtr(int i, int j) {
-		// tile at board cell is temp, not perm.
-		char ch = board[i][j];
-		if (ch == EMPTYCH || ch == BRDBLCH) {
-			return false;
-		}
-		if (ch == BRDTMPCH) {
-			return true;
-		}
-		return Character.isLowerCase(ch);
-	}
-	
-	public boolean isPermLtr(int i, int j) {
-		// tile at board cell is perm, not temp.
-		char ch = board[i][j];
-		if (ch == EMPTYCH || ch == BRDTMPCH) {
-			return false;
-		}
-		if (ch == BRDBLCH) {
-			return true;
-		}
-		return Character.isUpperCase(ch);
-	}
-	
-	public char convertTempToPerm(char ch) {
-		String s;
-		if (ch == EMPTYCH) {
-			return EMPTYCH;
-		}
-		if (ch == BRDTMPCH) {
-			return BRDBLCH;
-		}
-		if (Character.isLowerCase(ch)) {
-			s = "" + ch;
-			s = s.toUpperCase();
-			return s.charAt(0);
-		}
-		return ch;
-	}
-	
-	public boolean isValidPerm(int i, int j) {
-		// tile at board cell is perm.
-		// (i, j) need not be a valid cell loc.
-		return isValidBoardCell(i, j) && isPermLtr(i, j);
-	}
-	
-	public int getTempLtrCount() {
-		// count no. of temp. tiles on board
-		int count = 0;
-		
-		for (int i=0; i < BOARDHEIGHT; i++) {
-			for (int j=0; j < BOARDWIDTH; j++) {
-				if (isTempLtr(i, j)) {
-					count++;
-				}
-			}
-		}
-		return count;
-	}
-	
-	// calculate score of word intersecting with (row, col)
-	// negate and subtract 1 if word contains less than 2 temp letters
-	// board(row, col) assumed to be temp letter
-	
-	public int calcTurnScore(StringBuilder outBadWrdLst, boolean isUseDict) {
-		int row = -1;
-		int col = -1;
-		int score = 0;
-		int ascore, dscore;
-		boolean isAcross;
-		String aword, dword;
-		String badWrdLst;
-		
-		// find first temp. tile:
-		for (int i=0; i < BOARDHEIGHT; i++) {
-			for (int j=0; j < BOARDWIDTH; j++) {
-				if (isTempLtr(i, j)) {
-					row = i;
-					col = j;
-					break;
-				}
-			}
-			if (row >= 0) {
-				break;
-			}
-		}
-		if (row < 0) {
-			return 0;
-		}
-		badWrdLst = "";
-		aword = getWordThru(row, col, true);  // across
-		dword = getWordThru(row, col, false); // down
-		if (isUseDict) {
-			// append aword/dword if not in dict.
-			badWrdLst = appendBadWord(badWrdLst, aword);
-			badWrdLst = appendBadWord(badWrdLst, dword);
-		}
-		// calc. scores of words going thru curr. loc
-		// across, then down
-		ascore = getVecScore(row, col, true);
-		dscore = getVecScore(row, col, false);
-		isAcross = (ascore >= 0) || (dscore >= 0);
-		if (!isAcross) {
-			// only one temp. tile on board
-			outBadWrdLst.append(badWrdLst);
-			score = -(2 + ascore + dscore);
-			return score;
-		}
-		isAcross = (ascore >= 0);
-		if (isAcross) {
-			score = ascore - dscore - 1;
-		}
-		else {
-			score = dscore - ascore - 1;
-		}
-		// for all temp. tiles in word:
-		for (;;) {
-			if (isAcross) {
-				col++;
-			}
-			else {
-				row++;
-			}
-			if (!isValidBoardCell(row, col) || isBrdEmpty(row, col)) {
-				break;
-			}
-			if (!isTempLtr(row, col)) {
-				continue;
-			}
-			// subtract -ve score(s) of perpendicular word(s) from score of main word
-			score -= 1 + getVecScore(row, col, !isAcross);
-			if (isUseDict) {
-				aword = getWordThru(row, col, !isAcross);
-				// append perpendicular word if not in dict.
-				badWrdLst = appendBadWord(badWrdLst, aword);
-			}
-		}
-		outBadWrdLst.append(badWrdLst);
-		return score;
-	}
-
-	private int getVecScore(int row, int col, boolean isAcross) {
-		// calc. score of word going thru (row, col)
-		// score is -ve if only one temp. letter found:
-		//   real score = -1 - score
-		int n;
-		int score = 0;
-		int product = 1;
-		int currLtrScore;
-		int tempCount = 0;
-		int permCount = 0;
-		
-		if (!isTempLtr(row, col)) {
-			return 0;
-		}
-		n = getLeadCount(row, col, isAcross);
-		if (isAcross) {
-			col -= n;
-		}
-		else {
-			row -= n;
-		}
-		// we are now at beginning of word
-		do {
-			currLtrScore = getCellVal(row, col);
-			if (isTempLtr(row, col)) {
-				currLtrScore *= getFacLtr(row, col);
-				product *= getFacWrd(row, col);
-				tempCount++;
-			}
-			else {
-				permCount++;
-			}
-			score += currLtrScore;
-			if (isAcross) {
-				col++;
-			}
-			else {
-				row++;
-			}
-		} while (isValidBoardCell(row, col) && !isBrdEmpty(row, col));
-		if (tempCount < 2 && permCount == 0) {
-			// no word found to calc. score
-			// real score = -1 - (-1) = 0
-			return -1;
-		}
-		score *= product;
-		if (tempCount < 2) {
-			score = -1 - score;
-		}
-		else if (tempCount >= RACKSIZ) {
-			score += BONUS7LTRWRD;
-		}
-		return score;
-	}
-	
-	public int getLeadCount(int row, int col, boolean isAcross) {
-		// no. of leading tiles in word thru board cell
-		int i = row;
-		int j = col;
-		
-		for (;;) {
-			if (isAcross) {
-				col--;
-				if (!isValidBoardCell(row, col)) {
-					col++;
-					break;
-				}
-			}
-			else {
-				row--;
-				if (!isValidBoardCell(row , col)) {
-					row++;
-					break;
-				}
-			}
-			if (!isBrdEmpty(row, col)) {
-				continue;
-			}
-			if (isAcross) {
-				col++;
-				break;
-			}
-			row++;
-			break;
-		}
-		if (isAcross) {
-			return j - col;
-		}
-		return i - row;
-	}
-
-	public int getTrailCount(int row, int col, boolean isAcross) {
-		// no. of trailing tiles in word thru board cell
-		int i = row;
-		int j = col;
-		
-		for (;;) {
-			if (isAcross) {
-				col++;
-				if (!isValidBoardCell(row, col)) {
-					col--;
-					break;
-				}
-			}
-			else {
-				row++;
-				if (!isValidBoardCell(row , col)) {
-					row--;
-					break;
-				}
-			}
-			if (!isBrdEmpty(row, col)) {
-				continue;
-			}
-			if (isAcross) {
-				col--;
-				break;
-			}
-			row--;
-			break;
-		}
-		if (isAcross) {
-			return col - j;
-		}
-		return row - i;
-	}
-	
-	public String getWordThru(int row, int col, boolean isAcross) {
-		// return word thru board cell
-		// any blanks replaced with letter values
-		String word = "";
-		int m = getLeadCount(row, col, isAcross);
-		int n = getTrailCount(row, col, isAcross);
-		
-		if (isAcross) {
-			col -= m;
-		}
-		else {
-			row -= m;
-		}
-		for (int i = 0; i <= m + n; i++) {
-			word += getBrdLtrCh(row, col);
-			if (isAcross) {
-				col++;
-			}
-			else {
-				row++;
-			}
-		}
-		return word;
-	}
-	
-	public String appendBadWord(String outbuf, String word) {
-		if (word.length() <= 1 || dict.lookupWord(word)) {
-			return outbuf;
-		}
-		if (outbuf.equals("")) {
-			return word;
-		}
-		return outbuf + ' ' + word;
-	}
-	
-	public boolean lookupWord(String word) {
-		return dict.lookupWord(word);
-	}
-
-	public int getCellVal(int row, int col) {
-		// return value of letter at board cell
-		char ch;
-		String s;
-		int val;
-		
-		ch = getBoard(row, col);
-		if ((ch == BRDTMPCH) || isBrdBlank(row, col) || isBrdEmpty(row, col)) {
-			return 0;
-		}
-		s = "" + ch;
-		s = s.toUpperCase();
-		ch = s.charAt(0);
-		val = ch - 'A';
-		return getLtrVal(val);
-	}
-
-	public int getLtrVal(int i) {
-		return bagltrval[i];
-	}
-	
-	public int getChrVal(char ch) {
-		// return value of letter
-		if (!Character.isAlphabetic(ch)) {
-			return 0;
-		}
-		if (Character.isUpperCase(ch)) {
-			return getLtrVal(ch - 'A');
-		}
-		return getLtrVal(ch - 'a');
-	}
-	
-	public int getPassCount() {
-		return passCount;
-	}
-	
-	public void incPassCount() {
-		passCount++;
-	}
-	
-	public void zeroPassCount() {
-		passCount = 0;
-	}
-	
-	public String getSpaces(int n) {
-		String s = "";
-		
-		for (int i=0; i < n; i++) {
-			s += ' ';
-		}
-		return s;
-	}
-	
-	public String padLeft(String buf, int width) {
-		String s;
-		
-		s = getSpaces(width - buf.length()) + buf;
-		return s;
-	}
-}
-
-class Player implements IConst {
-
-	private String name;
-	private int score;
-	private int turnScore;
-	private boolean robot;
-	private boolean active;
-	private boolean skip;
-	private static String noNamePlayer = "player";
-	private static String robotPlayer = "robot";
-	public Rack rack;
-	private Board bo;
-	
-	Player(Board bo) {
-		this.bo = bo;
-		clearPlayer();
-	}
-
-	public void clearPlayer() {
-		name = "";
-		score = 0;
-		turnScore = 0;
-		robot = false;
-		active = false;
-		skip = false;
-		rack = new Rack(bo);
-	}
-
-	public void restartPlayer() {
-		score = 0;
-		turnScore = 0;
-		active = true;
-		skip = false;
-	}
-
-	public void setPlayer(String name, int idx, boolean robot) {
-		if (idx == 0) {
-			this.name = name;
-		}
-		else if (robot) {
-			this.name = robotPlayer + idx;
-		}
-		else {
-			this.name = noNamePlayer + idx;
-		}
-		this.robot = robot;
-		active = true;
-		skip = false;
-		rack.fillRack();
-	}
-	
-	public String getName() {
-		return name;
-	}
-	
-	public boolean isRobot() {
-		return robot;
-	}
-	
-	public boolean isActive() {
-		return active;
-	}
-	
-	public void setActive(boolean flag) {
-		active = flag;
-	}
-	
-	public boolean isSkip() {
-		return skip;
-	}
-	
-	public void setSkip(boolean flag) {
-		skip = flag;
-	}
-	
-	public int getScore() {
-		return score;
-	}
-	
-	public void setScore(int score) {
-		this.score = score;
-	}
-	
-	public int getTurnScore() {
-		return turnScore;
-	}
-	
-	public void setTurnScore(int score) {
-		turnScore = score;
-	}
-	
-}
-
-class Rack implements IConst {
-	
-	private static final char EMPTYCH = ' ';
-	private static final char OUTBLANKCH = '*';
-	private Board bo;
-	private char[] rackbuf;
-	private int rackLen;
-	private int rackPos;
-
-	Rack(Board bo) {
-		this.bo = bo;
-		rackbuf = new char[RACKSIZ];
-		rackLen = 0;
-		rackPos = 0;
-	}
-	
-	public int fillRack() {
-		int count = 0;
-		
-		for (int i=0; i < RACKSIZ; i++) {
-			if (bagToRack()) {
-				count++;
-			}
-		}
-		return count;
-	}
-	
-	public void clearRack() {
-		for (int i=0; i < RACKSIZ; i++) {
-			rackbuf[i] = EMPTYCH;
-		}
-		rackLen = 0;
-		rackPos = 0;
-	}
-	
-	public boolean pushRack(char ch) {
-		if (rackLen >= RACKSIZ) {
-			return false;
-		}
-		rackbuf[rackLen++] = ch;
-		return true;
-	}
-
-	public boolean bagToRack() {
-		char ch;
-		
-		if (rackLen >= RACKSIZ) {
-			return false;
-		}
-		ch = bo.popBag();
-		if (ch == (char) 0) {
-			return false;
-		}
-		rackbuf[rackLen++] = ch;
-		return true;
-	}
-	
-	public String getRackStr() {
-		// return contents of rack as a string
-		// padded on right by blanks
-		String s = "";
-		char ch;
-		int i, j;
-		
-		for (i=0; i < rackLen; i++) {
-			ch = rackbuf[i];
-			if (bo.isBlankBagLtr(ch)) {
-				ch = OUTBLANKCH;
-			}
-			s += ch;
-		}
-		for (j = rackLen; j < RACKSIZ; j++) {
-			s += EMPTYCH;
-		}
-		return s;
-	}
-
-	public int getRackPos() {
-		return rackPos;
-	}
-	
-	public void setRackPos(int pos) {
-		rackPos = pos;
-	}
-
-	public int getRackLen() {
-		return rackLen;
-	}
-	
-	public char getRackChar(int pos) {
-		return rackbuf[pos];
-	}
-	
-	public void setRackChar(int pos, char ch) {
-		rackbuf[pos] = ch;
-	}
-	
-	public void swapAdjChars(int pos) {
-		char ch = rackbuf[pos];
-		rackbuf[pos] = rackbuf[pos + 1];
-		rackbuf[pos + 1] = ch;
-	}
-	
-	public char removeRackChar() {
-		char ch;
-		if (rackLen == 0) {
-			return (char) 0;
-		}
-		ch = rackbuf[rackPos];
-		for (int i = rackPos; i < rackLen - 1; i++) {
-			rackbuf[i] = rackbuf[i + 1];
-		}
-		rackLen--;
-		if (rackPos >= rackLen && rackPos > 0) {
-			rackPos--;
-		}
-		return ch;
-	}
-	
-	public void insertRackChar(char ch) {
-		if (rackLen >= RACKSIZ) {
-			return;
-		}
-		for (int i = rackLen; i > rackPos; i--) {
-			rackbuf[i] = rackbuf[i - 1];
-		}
-		rackbuf[rackPos] = ch;
-		rackLen++;
-	}
-
-	public void appendRackChar(char ch) {
-		if (rackLen >= RACKSIZ) {
-			return;
-		}
-		rackbuf[rackLen] = ch;
-		rackLen++;
-		rackPos = rackLen - 1;
-	}
-	
-	public int getCharPos(char ch) {
-		// find pos. of first ch in rack
-		for (int i=0; i < rackLen; i++) {
-			if (rackbuf[i] == ch) {
-				return i;
-			}
-		}
-		return -1;
-	}
-	
-	public int getCharPosNext(char ch, int pos) {
-		// find pos. of next ch in rack (start after n chars.)
-		// where n = pos
-		for (int i = pos; i < rackLen; i++) {
-			if (rackbuf[i] == ch) {
-				return i;
-			}
-		}
-		return -1;
-	}
-	
-	public void shuffleRack(String word) {
-		// reorder tiles on rack so it starts with string = word
-		// blank tiles in word parameter are non-alphabetic
-		char ch;
-		for (int i=0; i < rackLen; i++) {
-			if (i < word.length()) {
-				ch = word.charAt(i);
-				if (Character.isAlphabetic(ch)) {
-					rackbuf[i] = ch;
-				}
-				else {
-					rackbuf[i] = EMPTYCH;
-				}
-			}
-		}
-	}
-
-}
-
-class BlankLocs {
-	
-	private static final int BLOCSIZ = 2;
-	private static final char EMPTYCH = ' ';
-	private int[] blocs;      // location(s) of blank(s)
-	private int bloccount;    // no. of blanks
-	private char[] blankStr;  // value(s) of blank(s)
-	
-	BlankLocs() {
-		blocs = new int[BLOCSIZ];
-		blankStr = new char[BLOCSIZ];
-		bloccount = 0;
-	}
-	
-	public int getBlankLoc(int i, int j) {
-		// returns 16-bit integer
-		// high byte = row no.
-		// low byte = col no.
-		return (i << 8) + j;
-	}
-	
-	public int getBlocCount() {
-		return bloccount;
-	}
-	
-	public void clrStk() {
-		bloccount = 0;
-	}
-	
-	public boolean pushBlank(int i, int j, char ch) {
-		int blankLoc = getBlankLoc(i, j);
-		
-		if (bloccount >= BLOCSIZ) {
-			return false;
-		}
-		blocs[bloccount] = blankLoc;
-		blankStr[bloccount++] = ch;
-		return true;
-	}
-	
-	public boolean popBlank() {
-		if (bloccount <= 0) {
-			return false;
-		}
-		bloccount--;
-		return true;
-	}
-	
-	public int topBlankLoc() {
-		if (bloccount <= 0) {
-			return -1;
-		}
-		return blocs[bloccount - 1];
-	}
-	
-	public char topBlankVal() {
-		if (bloccount <= 0) {
-			return EMPTYCH;
-		}
-		return blankStr[bloccount - 1];
-	}
-	
-	public int getBlankRow(int blankLoc) {
-		if (blankLoc < 0) {
-			return -1;
-		}
-		return blankLoc >> 8;
-	}
-	
-	public int getBlankCol(int blankLoc) {
-		if (blankLoc < 0) {
-			return -1;
-		}
-		return blankLoc & 0xFF;
-	}
-	
-	public int getBlocIdx(int i, int j) {
-		int bloc = getBlankLoc(i, j);
-		
-		for (int k=0; k < bloccount; k++) {
-			if (blocs[k] == bloc) {
-				return k;
-			}
-		}
-		return -1;
-	}
-	
-	public char getBlankVal(int i, int j) {
-		int k = getBlocIdx(i, j);
-		if (k < 0) {
-			return EMPTYCH;
-		}
-		else {
-			return blankStr[k];
-		}
-	}
-	
-	public boolean setBlankVal(int i, int j, char ch) {
-		int k = getBlocIdx(i, j);
-		if (k < 0) {
-			return false;
-		}
-		else {
-			blankStr[k] = ch;
-			return true;
-		}
-	}
-	
-	public boolean delBloc(int idx) {
-		if (idx < 0 || idx >= bloccount) {
-			return false;
-		}
-		blocs[idx] = blocs[--bloccount];
-		blankStr[idx] = blankStr[bloccount];
-		return true;
 	}
 	
 }

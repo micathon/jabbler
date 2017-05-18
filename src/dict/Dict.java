@@ -16,6 +16,10 @@ public class Dict {
 	private int blkCount;
 	private int blkPos;
 	private int wordPos;
+	private int errBlkNo = 5; //* old error
+	private boolean debug = false;
+	public boolean errflag;
+	public String errmsg;
 	
 	public Dict() {
 		String s;
@@ -25,6 +29,8 @@ public class Dict {
 		
 		wordCount = 0;
 		blkCount = 0;
+		errflag = false;
+		errmsg = "";
 		sep = File.separator;
 		dictFilePath = ".." + sep + dictFolderName + sep + dictFileName;
 		resetPosVars();
@@ -34,15 +40,26 @@ public class Dict {
 		try (BufferedReader br = new BufferedReader (new FileReader(dictFilePath)))
 		{
 			while ((s = br.readLine()) != null) {
+				s = s.trim();
+				if (s.equals("")) {  
+					logMsg("Warning: blank line in Dict.");
+					continue;
+				}
 				wordCount++;
 				n = s.length() + 1;
 				if (idx < 0 || (idx + n > BLOCKSIZ)) {
 					dictBuffers[blkCount++] = new DictBuf(s);
 					idx = n;
+					if (blkCount == errBlkNo) {  //*
+						logMsg("Start of nth block, word = "+s+", len = "+(n - 1));
+					}
 				}
 				else {
 					dictBuffers[blkCount - 1].appendWord(s);
 					idx += n;
+					if (blkCount == errBlkNo) {  //*
+						logMsg("Middle of nth block, word = "+s+", len = "+(n - 1));
+					}
 				}
 			}
 		} catch (IOException exc) {
@@ -66,6 +83,7 @@ public class Dict {
 		String word = "";
 		char ch;
 		byte b;
+		int count;
 		DictBuf buf = dictBuffers[blkPos];
 		
 		if (wordPos >= buf.getBufIdx()) {
@@ -75,10 +93,16 @@ public class Dict {
 			}
 			blkPos++;
 			wordPos = 0;
+			buf = dictBuffers[blkPos];
 		}
+		count = 0;
 		while ((b = buf.getByte(wordPos++)) != (byte) 0) {
 			ch = (char) b;
 			word += ch;
+			count++;
+		}
+		if (count == 0) {
+			logMsg("blkPos = "+blkPos+", wordPos = "+wordPos);
 		}
 		word = word.toUpperCase();
 		return word;
@@ -178,6 +202,14 @@ public class Dict {
 		}
 		return count;
 	}
+	
+	private void logMsg(String msg) {
+		errmsg = msg;
+		errflag = true;
+		if (debug) {
+			System.out.println(msg);
+		}
+	}
 
 }
 
@@ -186,6 +218,7 @@ class DictBuf {
 	private static final int BLOCKSIZ = 1000;
 	private byte[] block;
 	private int bufidx;
+	private boolean debug = false;
 	
 	DictBuf(String word) {
 		// create new block with single word at beginning of block
@@ -212,15 +245,30 @@ class DictBuf {
 	public void appendWord(String word) {
 		// append word (null-terminated) at current block position
 		int n = word.length();
+		byte b;
 		
+		if (n == 0) {  
+			logMsg("Error: null string passed to appendWord.");
+		}
 		if (bufidx + n + 1 > BLOCKSIZ) {
+			logMsg("Warning: appendWord returns on bufidx overflow.");
 			return;
 		}
 		for (int i=0; i < n; i++) {
-			setByte(bufidx + i, (byte) word.charAt(i));
+			b = (byte) word.charAt(i);
+			setByte(bufidx + i, b);
+			if (b == 0) { 
+				logMsg("Error: null byte encountered in dict.");
+			}
 		}
 		bufidx += n;
 		setByte(bufidx++, (byte) 0);
 	}
 	
+	private void logMsg(String msg) {
+		if (debug) {
+			System.out.println(msg);
+		}
+	}
+
 }
